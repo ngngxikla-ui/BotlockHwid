@@ -1,0 +1,214 @@
+import os
+import discord
+from discord.ext import commands
+from discord import app_commands
+import json
+import base64
+import requests
+from myserver import server_on  # ดึงระบบรัน 24 ชม. จากไฟล์ Flask
+
+# ==================== ตั้งค่าบอทและ GitHub ====================
+# ดึงค่าความลับจาก Environment Variables บน Render อัตโนมัติ (ปลอดภัย 100%)
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  
+REPO_OWNER = "ngngxikla-ui"
+REPO_NAME = "Bottt"
+FILE_PATH = "hwid.json"
+
+# 📌 ID ห้องที่อนุญาตให้ลูกค้าใช้คำสั่ง /addhwid ทั่วไป
+ALLOWED_CHANNEL_ID = 1536212439455236176  
+
+# 📌 ID ยศ Admin ของคุณ
+ADMIN_ROLE_ID = 1536205203823525958  
+# ==========================================================
+
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True  
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+def get_github_data():
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN else {}
+    try:
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            json_data = json.loads(content)
+            
+            if "hwids" not in json_data:
+                json_data["hwids"] = []
+            if "blacklist" not in json_data:
+                json_data["blacklist"] = []
+                
+            return json_data, data["sha"]
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+    return {"hwids": [], "blacklist": []}, None
+
+def save_github_data(json_data, sha, commit_message):
+    url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN else {}
+    
+    json_str = json.dumps(json_data, indent=4, ensure_ascii=False)
+    content_encoded = base64.b64encode(json_str.encode("utf-8")).decode("utf-8")
+    
+    payload = {
+        "message": commit_message,
+        "content": content_encoded,
+        "sha": sha
+    }
+    
+    response = requests.put(url, json=payload, headers=headers)
+    return response.status_code in [200, 201]
+
+@bot.event
+async def on_ready():
+    try:
+        synced = await bot.tree.sync()
+        print(f"========================================")
+        print(f"  LUCA SHOP BOT - ONLINE SUCCESSFULLY    ")
+        print(f"========================================")
+        print(f"Logged in as {bot.user} (Synced {len(synced)} commands)")
+    except Exception as e:
+        print(e)
+
+# 🔍 ฟังก์ชันตรวจสอบแอดมินแบบเรียลไทม์
+def is_admin(interaction: discord.Interaction) -> bool:
+    if interaction.user.guild_permissions.administrator:
+        return True
+    
+    if hasattr(interaction.user, "_roles") and ADMIN_ROLE_ID in interaction.user._roles:
+        return True
+        
+    if hasattr(interaction.user, "roles"):
+        for role in interaction.user.roles:
+            if role.id == ADMIN_ROLE_ID:
+                return True
+                
+    return False
+
+# ==================== คำสั่งต่างๆ (Commercial Grade) ====================
+
+@bot.tree.command(name="addhwid", description="เพิ่ม HWID เข้าสู่ระบบ (สำหรับลูกค้า)")
+@app_commands.describe(hwid="รหัส HWID ของคุณ")
+async def addhwid(interaction: discord.Interaction, hwid: str):
+    if not is_admin(interaction) and interaction.channel.id != ALLOWED_CHANNEL_ID:
+        await interaction.response.send_message(
+            f"❌ คำสั่งนี้สามารถใช้งานได้เฉพาะในห้อง <#{ALLOWED_CHANNEL_ID}> เท่านั้นครับ!", 
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message("⏳ กำลังบันทึกข้อมูล HWID ลงในระบบ...", ephemeral=True)
+    data, sha = get_github_data()
+    
+    if hwid in data["hwids"]:
+        await interaction.edit_original_response(content=f"⚠️ HWID นี้มีอยู่ในระบบอยู่แล้ว: `{hwid}`")
+        return
+    
+    if hwid in data["blacklist"]:
+        await interaction.edit_original_response(content=f"🚫 HWID นี้อยู่ในบัญชีดำ (Blacklist) ไม่สามารถใช้งานได้")
+        return
+
+    data["hwids"].append(hwid)
+    success = save_github_data(data, sha, f"Customer Add HWID: {hwid}")
+    
+    if success:
+        await interaction.edit_original_response(content=f"✅ เพิ่ม HWID สำเร็จ! คุณสามารถเข้าใช้งานโปรแกรมได้แล้ว: `{hwid}`")
+    else:
+        await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาแจ้งแอดมิน")
+
+@bot.tree.command(name="removehwid", description="[Admin] ลบ HWID ออกจากระบบ")
+@app_commands.describe(hwid="รหัส HWID ที่ต้องการลบ")
+async def removehwid(interaction: discord.Interaction, hwid: str):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        return
+    
+    await interaction.response.send_message("⏳ กำลังดำเนินการลบ HWID...", ephemeral=True)
+    data, sha = get_github_data()
+    
+    if hwid not in data["hwids"]:
+        await interaction.edit_original_response(content=f"❌ ไม่พบ HWID นี้ในระบบ: `{hwid}`")
+        return
+
+    data["hwids"].remove(hwid)
+    success = save_github_data(data, sha, f"Admin Remove HWID: {hwid}")
+    
+    if success:
+        await interaction.edit_original_response(content=f"🗑️ ลบ HWID สำเร็จ: `{hwid}`")
+    else:
+        await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub")
+
+@bot.tree.command(name="checkhwid", description="[Admin] ตรวจสอบรายชื่อ HWID และ Blacklist ทั้งหมด")
+async def checkhwid(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        return
+    
+    await interaction.response.send_message("⏳ กำลังดึงข้อมูลทั้งหมด...", ephemeral=True)
+    data, _ = get_github_data()
+    hwids = data.get("hwids", [])
+    blacklist = data.get("blacklist", [])
+    
+    hwid_list_str = "\n".join([f"- `{h}`" for h in hwids]) if hwids else "ไม่มี HWID ในระบบ"
+    blacklist_str = "\n".join([f"- `{b}`" for b in blacklist]) if blacklist else "ไม่มี Blacklist ในระบบ"
+    
+    embed = discord.Embed(title="📊 ข้อมูล HWID ทั้งหมดในระบบ", color=discord.Color.blue())
+    embed.add_field(name=f"🟢 HWID ปกติ ({len(hwids)} รายการ)", value=hwid_list_str[:1024], inline=False)
+    embed.add_field(name=f"🔴 Blacklist ({len(blacklist)} รายการ)", value=blacklist_str[:1024], inline=False)
+    
+    await interaction.edit_original_response(content=None, embed=embed)
+
+@bot.tree.command(name="blacklisthwid", description="[Admin] เพิ่ม HWID ลงในบัญชีดำเพื่อระงับการเข้าใช้งาน")
+@app_commands.describe(hwid="รหัส HWID ที่ต้องการแบน")
+async def blacklisthwid(interaction: discord.Interaction, hwid: str):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        return
+    
+    await interaction.response.send_message("⏳ กำลังดำเนินการแบน HWID...", ephemeral=True)
+    data, sha = get_github_data()
+    
+    if hwid in data["blacklist"]:
+        await interaction.edit_original_response(content=f"⚠️ HWID นี้อยู่ใน Blacklist อยู่แล้ว: `{hwid}`")
+        return
+    
+    if hwid in data["hwids"]:
+        data["hwids"].remove(hwid)
+        
+    data["blacklist"].append(hwid)
+    success = save_github_data(data, sha, f"Admin Blacklist HWID: {hwid}")
+    
+    if success:
+        await interaction.edit_original_response(content=f"🚫 บล็อกและเพิ่ม HWID ลง Blacklist สำเร็จ: `{hwid}`")
+    else:
+        await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub")
+
+@bot.tree.command(name="unblacklisthwid", description="[Admin] เอา HWID ออกจากบัญชีดำ")
+@app_commands.describe(hwid="รหัส HWID ที่ต้องการปลดแบน")
+async def unblacklisthwid(interaction: discord.Interaction, hwid: str):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        return
+    
+    await interaction.response.send_message("⏳ กำลังดำเนินการปลดแบน...", ephemeral=True)
+    data, sha = get_github_data()
+    
+    if hwid not in data["blacklist"]:
+        await interaction.edit_original_response(content=f"❌ ไม่พบ HWID นี้ในรายการ Blacklist: `{hwid}`")
+        return
+
+    data["blacklist"].remove(hwid)
+    success = save_github_data(data, sha, f"Admin Unblacklist HWID: {hwid}")
+    
+    if success:
+        await interaction.edit_original_response(content=f"✅ ปลดแบล็กลิสต์ HWID สำเร็จ: `{hwid}`")
+    else:
+        await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub")
+
+# ==================== เปิดระบบ 24 ชม. และรันบอท ====================
+if __name__ == "__main__":
+    server_on()  # เปิด Flask Server ควบคู่ไปด้วย
+    bot.run(os.getenv('TOKEN'))  # ดึง Token บอทจาก Render อย่างปลอดภัย
