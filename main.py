@@ -13,10 +13,13 @@ REPO_OWNER = "ngngxikla-ui"
 REPO_NAME = "Bottt"
 FILE_PATH = "hwid.json"
 
-# 📌 ดึงค่าผ่าน Environment Variables บน Render (สามารถเปลี่ยนค่าผ่านหน้าเว็บ Render ได้ทันที)
+# 📌 ค่าลิงก์เชิญเข้าเซิร์ฟเวอร์หลักของคุณ (สามารถเปลี่ยนลิงก์ตรงนี้หรือใส่ใน Environment Variables บน Render ได้)
+MAIN_SERVER_INVITE = os.getenv("MAIN_SERVER_INVITE", "https://discord.gg/your-main-server")
+
+# 📌 ดึงค่าผ่าน Environment Variables บน Render
 ALLOWED_CHANNEL_ID = int(os.getenv("ALLOWED_CHANNEL_ID", "1536234943431053333"))
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID", "1533642657413464247"))
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://ptb.discord.com/api/webhooks/1536237329847554100/LtnZDy7eey-NHJhO-PXQ_6erUqCKG4K60PEbs4uB4CavLAr4iV6pbwfcHUyR-nnEQ97O")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")  
 # ==========================================================
 
 intents = discord.Intents.default()
@@ -55,11 +58,13 @@ def get_github_data():
                 json_data["hwids"] = []
             if "blacklist" not in json_data:
                 json_data["blacklist"] = []
+            if "server_id" not in json_data:
+                json_data["server_id"] = None  # เก็บไอดีเซิร์ฟเวอร์ที่ล็อคไว้
                 
             return json_data, data["sha"]
     except Exception as e:
         print(f"Error fetching data: {e}")
-    return {"hwids": [], "blacklist": []}, None
+    return {"hwids": [], "blacklist": [], "server_id": None}, None
 
 def save_github_data(json_data, sha, commit_message):
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
@@ -80,9 +85,7 @@ def save_github_data(json_data, sha, commit_message):
 @bot.event
 async def on_ready():
     try:
-        # 🟢 ตั้งค่าสถานะบอทให้ขึ้นว่า "กำลังเล่น Roblox" ด้านล่างชื่อ
         await bot.change_presence(activity=discord.Game(name="Roblox"))
-        
         synced = await bot.tree.sync()
         print(f"========================================")
         print(f"  LUCA SHOP BOT - ONLINE SUCCESSFULLY    ")
@@ -95,22 +98,64 @@ async def on_ready():
 def is_admin(interaction: discord.Interaction) -> bool:
     if interaction.user.guild_permissions.administrator:
         return True
-    
     if hasattr(interaction.user, "_roles") and ADMIN_ROLE_ID in interaction.user._roles:
         return True
-        
     if hasattr(interaction.user, "roles"):
         for role in interaction.user.roles:
             if role.id == ADMIN_ROLE_ID:
                 return True
-                
     return False
+
+# 🔒 ฟังก์ชันตรวจสอบ Server ID (ป้องกันนำไปใช้เซิร์ฟเวอร์อื่น)
+async def check_server_lock(interaction: discord.Interaction) -> bool:
+    data, _ = get_github_data()
+    locked_server_id = data.get("server_id")
+    
+    # ถ้ายังไม่ได้ตั้งค่าล็อคเซิร์ฟเวอร์ใดๆ ให้ผ่านได้ (หรือจะบังคับให้ตั้งก่อนก็ได้)
+    if not locked_server_id:
+        return True
+        
+    # ถ้าไอดีเซิร์ฟเวอร์ปัจจุบันไม่ตรงกับที่ล็อคไว้
+    if str(interaction.guild.id) != str(locked_server_id):
+        await interaction.response.send_message(
+            f"❌ **ไม่สามารถใช้งานบอทนี้ในเซิร์ฟเวอร์นี้ได้!**\n"
+            f"⚠️ บอทตัวนี้ถูกล็อคการใช้งานไว้เฉพาะเซิร์ฟเวอร์ที่กำหนดเท่านั้น\n"
+            f"🔗 สนใจใช้งานหรือเข้าสู่คอมมูนิตี้หลัก กรุณาเข้าที่ลิงก์นี้: {MAIN_SERVER_INVITE}",
+            ephemeral=True
+        )
+        return False
+    return True
+
+# ==================== คำสั่งจัดการระบบ Server Lock ====================
+
+@bot.tree.command(name="setserver", description="[Admin] ล็อคบอทให้ใช้งานได้เฉพาะเซิร์ฟเวอร์นี้เท่านั้น")
+async def setserver(interaction: discord.Interaction):
+    if not is_admin(interaction):
+        await interaction.response.send_message("❌ เฉพาะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        return
+
+    await interaction.response.send_message("⏳ กำลังบันทึก Server ID ลงในระบบ...", ephemeral=True)
+    data, sha = get_github_data()
+    
+    current_server_id = str(interaction.guild.id)
+    data["server_id"] = current_server_id
+    
+    success = save_github_data(data, sha, f"Admin Lock Bot to Server: {current_server_id}")
+    
+    if success:
+        await interaction.edit_original_response(content=f"🔒 **ล็อคบอทกับเซิร์ฟเวอร์นี้สำเร็จ!**\n- Server Name: `{interaction.guild.name}`\n- Server ID: `{current_server_id}`")
+        send_webhook_log("🔒 มีการตั้งค่า Server Lock", f"**แอดมิน:** {interaction.user.mention}\n**เซิร์ฟเวอร์:** {interaction.guild.name} (`{current_server_id}`)", 16776960)
+    else:
+        await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub")
 
 # ==================== คำสั่งต่างๆ (Commercial Grade) ====================
 
 @bot.tree.command(name="addhwid", description="เพิ่ม HWID เข้าสู่ระบบ (สำหรับลูกค้า)")
 @app_commands.describe(hwid="รหัส HWID ของคุณ")
 async def addhwid(interaction: discord.Interaction, hwid: str):
+    if not await check_server_lock(interaction):
+        return
+
     if not is_admin(interaction) and interaction.channel.id != ALLOWED_CHANNEL_ID:
         await interaction.response.send_message(
             f"❌ คำสั่งนี้สามารถใช้งานได้เฉพาะในห้อง <#{ALLOWED_CHANNEL_ID}> เท่านั้นครับ!", 
@@ -141,8 +186,10 @@ async def addhwid(interaction: discord.Interaction, hwid: str):
 @bot.tree.command(name="removehwid", description="[Admin] ลบ HWID ออกจากระบบ")
 @app_commands.describe(hwid="รหัส HWID ที่ต้องการลบ")
 async def removehwid(interaction: discord.Interaction, hwid: str):
+    if not await check_server_lock(interaction):
+        return
     if not is_admin(interaction):
-        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        await interaction.response.send_message("❌ เฉพาะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
         return
     
     await interaction.response.send_message("⏳ กำลังดำเนินการลบ HWID...", ephemeral=True)
@@ -163,8 +210,10 @@ async def removehwid(interaction: discord.Interaction, hwid: str):
 
 @bot.tree.command(name="checkhwid", description="[Admin] ตรวจสอบรายชื่อ HWID และ Blacklist ทั้งหมด")
 async def checkhwid(interaction: discord.Interaction):
+    if not await check_server_lock(interaction):
+        return
     if not is_admin(interaction):
-        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        await interaction.response.send_message("❌ เฉพาะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
         return
     
     await interaction.response.send_message("⏳ กำลังดึงข้อมูลทั้งหมด...", ephemeral=True)
@@ -184,8 +233,10 @@ async def checkhwid(interaction: discord.Interaction):
 @bot.tree.command(name="blacklisthwid", description="[Admin] เพิ่ม HWID ลงในบัญชีดำเพื่อระงับการเข้าใช้งาน")
 @app_commands.describe(hwid="รหัส HWID ที่ต้องการแบน")
 async def blacklisthwid(interaction: discord.Interaction, hwid: str):
+    if not await check_server_lock(interaction):
+        return
     if not is_admin(interaction):
-        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        await interaction.response.send_message("❌ เฉพาะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
         return
     
     await interaction.response.send_message("⏳ กำลังดำเนินการแบน HWID...", ephemeral=True)
@@ -210,8 +261,10 @@ async def blacklisthwid(interaction: discord.Interaction, hwid: str):
 @bot.tree.command(name="unblacklisthwid", description="[Admin] เอา HWID ออกจากบัญชีดำ")
 @app_commands.describe(hwid="รหัส HWID ที่ต้องการปลดแบน")
 async def unblacklisthwid(interaction: discord.Interaction, hwid: str):
+    if not await check_server_lock(interaction):
+        return
     if not is_admin(interaction):
-        await interaction.response.send_message("❌ เฉพาะแอดมินหรือผู้มีฐานะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
+        await interaction.response.send_message("❌ เฉพาะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้", ephemeral=True)
         return
     
     await interaction.response.send_message("⏳ กำลังดำเนินการปลดแบน...", ephemeral=True)
@@ -233,4 +286,4 @@ async def unblacklisthwid(interaction: discord.Interaction, hwid: str):
 # ==================== เปิดระบบ 24 ชม. และรันบอท ====================
 if __name__ == "__main__":
     server_on()  # เปิด Flask Server ควบคู่ไปด้วย
-    bot.run(os.getenv('TOKEN'))  # ดึง Token บอทจาก Render อย่างปลอดภัย
+    bot.run(os.getenv('TOKEN'))  # ดึง Token บอทจาก Render
