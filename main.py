@@ -8,7 +8,6 @@ import requests
 from myserver import server_on  # ดึงระบบรัน 24 ชม. จากไฟล์ Flask
 
 # ==================== ตั้งค่าบอทและ GitHub ====================
-# ดึงค่าความลับจาก Environment Variables บน Render อัตโนมัติ (ปลอดภัย 100%)
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")  
 REPO_OWNER = "ngngxikla-ui"
 REPO_NAME = "Bottt"
@@ -65,6 +64,9 @@ def save_github_data(json_data, sha, commit_message):
 @bot.event
 async def on_ready():
     try:
+        # 🟢 ตั้งค่าสถานะบอทให้ขึ้นว่า "กำลังเล่น Roblox" ด้านล่างชื่อ
+        await bot.change_presence(activity=discord.Game(name="Roblox"))
+        
         synced = await bot.tree.sync()
         print(f"========================================")
         print(f"  LUCA SHOP BOT - ONLINE SUCCESSFULLY    ")
