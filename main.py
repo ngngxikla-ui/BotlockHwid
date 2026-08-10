@@ -30,7 +30,7 @@ ALLOWED_CHANNEL_ID = int(os.getenv("ALLOWED_CHANNEL_ID", "1536234943431053333"))
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID", "1533642657413464247"))
 WEBHOOK_URL = os.getenv(
     "WEBHOOK_URL",
-    "https://ptb.discord.com/api/webhooks/1536237329847554100/LtnZDy7eey-NHJhO-PXQ_6erUqCKG4K60PEbs4uB4CavLAr4iV6pbwfcHUyR-nnEQ97O",
+    "https://discord.com/api/webhooks/1536237329847554100/LtnZDy7eey-NHJhO-PXQ_6erUqCKG4K60PEbs4uB4CavLAr4iV6pbwfcHUyR-nnEQ97O",
 )
 # ==========================================================
 
