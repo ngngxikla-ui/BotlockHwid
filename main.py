@@ -114,6 +114,21 @@ async def on_ready():
   print(f"Logged in as {bot.user}")
 
 
+# 🔄 คำสั่งสำหรับพิมพ์ !sync ในแชท เพื่อบังคับให้ Slash Commands โผล่ในเซิร์ฟเวอร์นั้นทันที
+@bot.command(name="sync")
+async def sync_command(ctx):
+  if not ctx.author.guild_permissions.administrator:
+    await ctx.send("❌ เฉพาะแอดมินเท่านั้นที่สามารถใช้คำสั่งนี้ได้")
+    return
+  try:
+    synced = await bot.tree.sync(guild=ctx.guild)
+    await ctx.send(
+        f"✅ ซิงค์ Slash Commands สำเร็จ! ({len(synced)} คำสั่งในเซิร์ฟเวอร์นี้)"
+    )
+  except Exception as e:
+    await ctx.send(f"❌ เกิดข้อผิดพลาดในการซิงค์: {e}")
+
+
 # 🔍 ฟังก์ชันตรวจสอบแอดมินแบบเรียลไทม์
 def is_admin(interaction: discord.Interaction) -> bool:
   if interaction.user.guild_permissions.administrator:
