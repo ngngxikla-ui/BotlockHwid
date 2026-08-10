@@ -14,6 +14,12 @@ REPO_OWNER = "ngngxikla-ui"
 REPO_NAME = "Bottt"
 FILE_PATH = "hwid.json"
 
+# 📌 [สำคัญ] ใส่ ID เซิร์ฟเวอร์ Discord ของคุณตรงนี้ (หรือตั้งค่าผ่าน Environment Variable ชื่อ TARGET_GUILD_ID บน Render)
+# ตัวอย่าง: TARGET_GUILD_ID = int(os.getenv("TARGET_GUILD_ID", "123456789012345678"))
+TARGET_GUILD_ID = int(
+    os.getenv("TARGET_GUILD_ID", "1448273040961048618")
+)  # <-- เปลี่ยนเลข 0 เป็น ID เซิร์ฟเวอร์ของคุณ
+
 # 📌 ค่าลิงก์เชิญเข้าเซิร์ฟเวอร์หลักของคุณ
 MAIN_SERVER_INVITE = os.getenv(
     "MAIN_SERVER_INVITE", "https://discord.gg/whahzWC4NU"
@@ -40,8 +46,19 @@ class MyBot(commands.Bot):
 
   async def setup_hook(self):
     try:
-      synced = await self.tree.sync()
-      print(f"Synced {len(synced)} slash commands successfully!")
+      if TARGET_GUILD_ID != 0:
+        # บังคับซิงค์คำสั่งเฉพาะเจาะจงลงใน Server ID ที่กำหนดทันที
+        guild_obj = discord.Object(id=TARGET_GUILD_ID)
+        self.tree.copy_global_to(guild=guild_obj)
+        synced = await self.tree.sync(guild=guild_obj)
+        print(
+            f"Synced {len(synced)} slash commands to target server"
+            f" ({TARGET_GUILD_ID}) successfully!"
+        )
+      else:
+        # หากไม่ได้ใส่ จะซิงค์แบบสากล (Global)
+        synced = await self.tree.sync()
+        print(f"Synced {len(synced)} global slash commands successfully!")
     except Exception as e:
       print(f"Failed to sync commands: {e}")
 
@@ -114,7 +131,7 @@ async def on_ready():
   print(f"Logged in as {bot.user}")
 
 
-# 🔄 คำสั่งสำหรับพิมพ์ !sync ในแชท เพื่อบังคับให้ Slash Commands โผล่ในเซิร์ฟเวอร์นั้นทันที
+# 🔄 คำสั่งเสริมเผื่อต้องการบังคับซิงค์ผ่านแชทในเซิร์ฟเวอร์นั้นๆ
 @bot.command(name="sync")
 async def sync_command(ctx):
   if not ctx.author.guild_permissions.administrator:
