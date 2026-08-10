@@ -14,20 +14,19 @@ REPO_OWNER = "ngngxikla-ui"
 REPO_NAME = "Bottt"
 FILE_PATH = "hwid.json"
 
-# 📌 [สำคัญ] ใส่ ID เซิร์ฟเวอร์ Discord ของคุณตรงนี้ (หรือตั้งค่าผ่าน Environment Variable ชื่อ TARGET_GUILD_ID บน Render)
-# ตัวอย่าง: TARGET_GUILD_ID = int(os.getenv("TARGET_GUILD_ID", "123456789012345678"))
-TARGET_GUILD_ID = int(
-    os.getenv("TARGET_GUILD_ID", "1448273040961048618")
-)  # <-- เปลี่ยนเลข 0 เป็น ID เซิร์ฟเวอร์ของคุณ
+# 📌 Server ID ของเซิร์ฟเวอร์หลักคุณ
+TARGET_GUILD_ID = int(os.getenv("TARGET_GUILD_ID", "1448273040961048618"))
 
-# 📌 ค่าลิงก์เชิญเข้าเซิร์ฟเวอร์หลักของคุณ
+# 📌 ลิงก์เชิญเข้าเซิร์ฟเวอร์หลัก
 MAIN_SERVER_INVITE = os.getenv(
     "MAIN_SERVER_INVITE", "https://discord.gg/whahzWC4NU"
 )
 
-# 📌 ดึงค่าผ่าน Environment Variables บน Render
+# 📌 ค่าการตั้งค่าต่างๆ
 ALLOWED_CHANNEL_ID = int(os.getenv("ALLOWED_CHANNEL_ID", "1536234943431053333"))
 ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID", "1533642657413464247"))
+
+# 📌 อัปเดต Webhook URL ใหม่ล่าสุดตามที่คุณต้องการ
 WEBHOOK_URL = os.getenv(
     "WEBHOOK_URL",
     "https://discord.com/api/webhooks/1536237329847554100/LtnZDy7eey-NHJhO-PXQ_6erUqCKG4K60PEbs4uB4CavLAr4iV6pbwfcHUyR-nnEQ97O",
@@ -47,7 +46,6 @@ class MyBot(commands.Bot):
   async def setup_hook(self):
     try:
       if TARGET_GUILD_ID != 0:
-        # บังคับซิงค์คำสั่งเฉพาะเจาะจงลงใน Server ID ที่กำหนดทันที
         guild_obj = discord.Object(id=TARGET_GUILD_ID)
         self.tree.copy_global_to(guild=guild_obj)
         synced = await self.tree.sync(guild=guild_obj)
@@ -56,7 +54,6 @@ class MyBot(commands.Bot):
             f" ({TARGET_GUILD_ID}) successfully!"
         )
       else:
-        # หากไม่ได้ใส่ จะซิงค์แบบสากล (Global)
         synced = await self.tree.sync()
         print(f"Synced {len(synced)} global slash commands successfully!")
     except Exception as e:
@@ -131,7 +128,6 @@ async def on_ready():
   print(f"Logged in as {bot.user}")
 
 
-# 🔄 คำสั่งเสริมเผื่อต้องการบังคับซิงค์ผ่านแชทในเซิร์ฟเวอร์นั้นๆ
 @bot.command(name="sync")
 async def sync_command(ctx):
   if not ctx.author.guild_permissions.administrator:
@@ -146,7 +142,6 @@ async def sync_command(ctx):
     await ctx.send(f"❌ เกิดข้อผิดพลาดในการซิงค์: {e}")
 
 
-# 🔍 ฟังก์ชันตรวจสอบแอดมินแบบเรียลไทม์
 def is_admin(interaction: discord.Interaction) -> bool:
   if interaction.user.guild_permissions.administrator:
     return True
@@ -162,7 +157,6 @@ def is_admin(interaction: discord.Interaction) -> bool:
   return False
 
 
-# 🔒 ฟังก์ชันตรวจสอบ Server ID (ป้องกันนำไปใช้เซิร์ฟเวอร์อื่น)
 async def check_server_lock(interaction: discord.Interaction) -> bool:
   data, _ = get_github_data()
   locked_server_id = data.get("server_id")
@@ -180,9 +174,6 @@ async def check_server_lock(interaction: discord.Interaction) -> bool:
     )
     return False
   return True
-
-
-# ==================== คำสั่งจัดการระบบ Server Lock ====================
 
 
 @bot.tree.command(
@@ -226,9 +217,6 @@ async def setserver(interaction: discord.Interaction):
     await interaction.edit_original_response(
         content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub"
     )
-
-
-# ==================== คำสั่งต่างๆ (Commercial Grade) ====================
 
 
 @bot.tree.command(
@@ -456,9 +444,7 @@ async def unblacklisthwid(interaction: discord.Interaction, hwid: str):
     )
 
 
-# ==================== เปิดระบบ 24 ชม. และรันบอท ====================
 if __name__ == "__main__":
-  # รัน Flask Server ควบคู่ใน Background Thread เพื่อป้องกันปัญหาบอทหลุด/สถานะหาย
   threading.Thread(target=server_on, daemon=True).start()
 
   token = os.getenv("TOKEN")
