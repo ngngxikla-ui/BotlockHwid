@@ -13,17 +13,33 @@ REPO_OWNER = "ngngxikla-ui"
 REPO_NAME = "Bottt"
 FILE_PATH = "hwid.json"
 
-# 📌 ID ห้องที่อนุญาตให้ลูกค้าใช้คำสั่ง /addhwid ทั่วไป
-ALLOWED_CHANNEL_ID = 1536212439455236176  
-
-# 📌 ID ยศ Admin ของคุณ
-ADMIN_ROLE_ID = 1536205203823525958  
+# 📌 ดึงค่าผ่าน Environment Variables บน Render (สามารถเปลี่ยนค่าผ่านหน้าเว็บ Render ได้ทันที)
+ALLOWED_CHANNEL_ID = int(os.getenv("ALLOWED_CHANNEL_ID", "1536234943431053333"))
+ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID", "1533642657413464247"))
+WEBHOOK_URL = os.getenv("https://ptb.discord.com/api/webhooks/1536237329847554100/LtnZDy7eey-NHJhO-PXQ_6erUqCKG4K60PEbs4uB4CavLAr4iV6pbwfcHUyR-nnEQ97O", "")  # URL Webhook สำหรับส่ง Log แจ้งเตือน (ถ้ามีใส่ไว้)
 # ==========================================================
 
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True  
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+def send_webhook_log(title, description, color):
+    """ฟังก์ชันส่งข้อความแจ้งเตือนผ่าน Discord Webhook"""
+    if not WEBHOOK_URL:
+        return
+    payload = {
+        "embeds": [{
+            "title": title,
+            "description": description,
+            "color": color,
+            "footer": {"text": "Luca Shop HWID System Logger"}
+        }]
+    }
+    try:
+        requests.post(WEBHOOK_URL, json=payload)
+    except Exception as e:
+        print(f"Webhook Error: {e}")
 
 def get_github_data():
     url = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}/contents/{FILE_PATH}"
@@ -118,6 +134,7 @@ async def addhwid(interaction: discord.Interaction, hwid: str):
     
     if success:
         await interaction.edit_original_response(content=f"✅ เพิ่ม HWID สำเร็จ! คุณสามารถเข้าใช้งานโปรแกรมได้แล้ว: `{hwid}`")
+        send_webhook_log("🟢 มีการเพิ่ม HWID ใหม่", f"**ผู้ใช้:** {interaction.user.mention}\n**HWID:** `{hwid}`", 3066993)
     else:
         await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาแจ้งแอดมิน")
 
@@ -140,6 +157,7 @@ async def removehwid(interaction: discord.Interaction, hwid: str):
     
     if success:
         await interaction.edit_original_response(content=f"🗑️ ลบ HWID สำเร็จ: `{hwid}`")
+        send_webhook_log("🗑️ มีการลบ HWID ออกจากระบบ", f"**แอดมิน:** {interaction.user.mention}\n**HWID ที่ลบ:** `{hwid}`", 15158332)
     else:
         await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub")
 
@@ -185,6 +203,7 @@ async def blacklisthwid(interaction: discord.Interaction, hwid: str):
     
     if success:
         await interaction.edit_original_response(content=f"🚫 บล็อกและเพิ่ม HWID ลง Blacklist สำเร็จ: `{hwid}`")
+        send_webhook_log("🚫 มีการแบน HWID (Blacklist)", f"**แอดมิน:** {interaction.user.mention}\n**HWID ที่แบน:** `{hwid}`", 16711680)
     else:
         await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub")
 
@@ -207,6 +226,7 @@ async def unblacklisthwid(interaction: discord.Interaction, hwid: str):
     
     if success:
         await interaction.edit_original_response(content=f"✅ ปลดแบล็กลิสต์ HWID สำเร็จ: `{hwid}`")
+        send_webhook_log("✅ มีการปลดแบน HWID", f"**แอดมิน:** {interaction.user.mention}\n**HWID ที่ปลด:** `{hwid}`", 65280)
     else:
         await interaction.edit_original_response(content="❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลลง GitHub")
 
