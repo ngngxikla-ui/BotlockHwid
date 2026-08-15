@@ -28,7 +28,7 @@ ADMIN_ROLE_ID = int(os.getenv("ADMIN_ROLE_ID", "1533642657413464247"))
 
 # 📌 อัปเดต Webhook URL ใหม่ล่าสุดตามที่คุณต้องการ
 WEBHOOK_URL = os.getenv(
-    "WEBHOOK_URL",
+    "https://ptb.discord.com/api/webhooks/1536237329847554100/LtnZDy7eey-NHJhO-PXQ_6erUqCKG4K60PEbs4uB4CavLAr4iV6pbwfcHUyR-nnEQ97O",
     "https://discord.com/api/webhooks/1536237329847554100/LtnZDy7eey-NHJhO-PXQ_6erUqCKG4K60PEbs4uB4CavLAr4iV6pbwfcHUyR-nnEQ97O",
 )
 # ==========================================================
